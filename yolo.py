@@ -8,7 +8,7 @@ import os
 from timeit import default_timer as timer
 
 import numpy as np
-from keras import backend as K
+from tensorflow.compat.v1.keras import backend as K
 from keras.models import load_model
 from keras.layers import Input
 from PIL import Image, ImageFont, ImageDraw
@@ -16,7 +16,9 @@ from PIL import Image, ImageFont, ImageDraw
 from yolo3.model import yolo_eval, yolo_body, tiny_yolo_body
 from yolo3.utils import letterbox_image
 import os
-from keras.utils import multi_gpu_model
+#from keras.utils import multi_gpu_model
+import tensorflow
+tensorflow.compat.v1.disable_eager_execution()
 
 class YOLO(object):
     _defaults = {
@@ -93,7 +95,10 @@ class YOLO(object):
         # Generate output tensor targets for filtered bounding boxes.
         self.input_image_shape = K.placeholder(shape=(2, ))
         if self.gpu_num>=2:
-            self.yolo_model = multi_gpu_model(self.yolo_model, gpus=self.gpu_num)
+            # https://tensorflow.google.cn/api_docs/python/tf/distribute/MirroredStrategy
+            my_strategy = tensorflow.distribute.MirroredStrategy()
+            with my_strategy.scope():
+                self.yolo_model = multi_gpu_model(self.yolo_model, gpus=self.gpu_num)
         boxes, scores, classes = yolo_eval(self.yolo_model.output, self.anchors,
                 len(self.class_names), self.input_image_shape,
                 score_threshold=self.score, iou_threshold=self.iou)
@@ -128,7 +133,7 @@ class YOLO(object):
 
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
                     size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
-        thickness = (image.size[0] + image.size[1]) // 300
+        thickness = (image.size[0] + image.size[1]) // 500
 
         for i, c in reversed(list(enumerate(out_classes))):
             predicted_class = self.class_names[c]
@@ -159,7 +164,7 @@ class YOLO(object):
             draw.rectangle(
                 [tuple(text_origin), tuple(text_origin + label_size)],
                 fill=self.colors[c])
-            draw.text(text_origin, label, fill=(0, 0, 0), font=font)
+            draw.text(text_origin, label, fill=(255, 255, 255), font=font)
             del draw
 
         end = timer()
